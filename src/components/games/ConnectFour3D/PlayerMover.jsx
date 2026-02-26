@@ -13,7 +13,7 @@ import {
   STAIR3_POS_X, STAIR3_POS_Z, STAIR3_BASE_Y, STAIR3_WIDTH, STAIR3_RUN, STAIR3_RISE, STAIR3_STEPS,
   STAIR3_PLATFORM_DEPTH, STAIR3_PLATFORM_WIDTH,
 } from './constants';
-import { getGroundHeightXZAtY, buildStairAABBsWorld, getTerrainHeightXZ, CURRENT_PLACED_CUBES } from './terrainPhysics';
+import { getGroundHeightXZAtY, buildStairAABBsWorld, getTerrainHeightXZ, CURRENT_PLACED_CUBES, GIANT_MOON_SPHERE, getSphereSurfaceData, sphereBumpAt } from './terrainPhysics';
 import { useWeaponSystem } from './useWeaponSystem';
 import { FootstepAudio } from './audioComponents';
 import { useInventoryStore } from './useInventoryStore';
@@ -63,6 +63,15 @@ export function PlayerMover({ firstPersonMode = false, setFirstPersonMode = null
   const jetpackVzRef = useRef(0);      // world-space horizontal Z velocity (momentum)
   const jetpackLandTimerRef = useRef(null); // delayed fly→idle anim transition
   const [isFalling, setIsFalling] = useState(false); // true when descending during jetpack → triggers jump/fall anim
+  // ── Sphere mode state (spherical gravity on the giant moon) ──
+  const sphereModeRef = useRef(0);                          // 0 = flat terrain, 1 = on sphere
+  const sphereUpRef = useRef(new THREE.Vector3(0, 1, 0));   // surface normal (world space)
+  const sphereQRef = useRef(new THREE.Quaternion());         // cached sphere orientation quaternion
+  const _Y_AXIS = useMemo(() => new THREE.Vector3(0, 1, 0), []);
+  const _tmpV3a = useMemo(() => new THREE.Vector3(), []);
+  const _tmpV3b = useMemo(() => new THREE.Vector3(), []);
+  const _tmpQ1 = useMemo(() => new THREE.Quaternion(), []);
+  const _tmpQ2 = useMemo(() => new THREE.Quaternion(), []);
   // Platform support: allow landing on the tabletop and staying there
   const fhForGround = ROWS * (CELL + GAP) - GAP + 0.6;
   const localGroundY = -fhForGround / 2 - GROUND_CLEAR;
@@ -1140,7 +1149,10 @@ export function PlayerMover({ firstPersonMode = false, setFirstPersonMode = null
     const effYaw = firstPersonMode
       ? (window.__CF_FPS_CAMERA_YAW__ ?? yawRef.current ?? 0)
       : (yawRef.current || 0);
-    ref.current.rotation.y = effYaw;
+    // In sphere mode, orientation is set via quaternion — don't overwrite with Euler yaw
+    if (sphereModeRef.current < 0.5) {
+      ref.current.rotation.y = effYaw;
+    }
     // Update turning state flags for animations - disabled in FPS and when menu open
     const turningLeftNow = !firstPersonMode && !settingsMenuOpen && ((leftHeld || gp.leftStickX < -0.3 || gp.rightStickX < -0.3) && moving === 0);
     const turningRightNow = !firstPersonMode && !settingsMenuOpen && ((rightHeld || gp.leftStickX > 0.3 || gp.rightStickX > 0.3) && moving === 0);
@@ -1210,6 +1222,201 @@ export function PlayerMover({ firstPersonMode = false, setFirstPersonMode = null
       jetpackTiltZRef.current += (0 - jetpackTiltZRef.current) * Math.min(1, 10 * dt);
     }
     // ── End jetpack logic ──────────────────────────────────────────────
+
+  // ══════════════════════════════════════════════════════════════════
+  // ── SPHERE MODE: full spherical gravity on the giant moon ────────
+  // ══════════════════════════════════════════════════════════════════
+  let sphereHandled = false;
+  {
+    const ms = GIANT_MOON_SPHERE;
+    if (ms) {
+      // Current world position (3D)
+      const bx = baseOffset?.[0] || 0;
+      const bz = baseOffset?.[1] || 0;
+      const curWx = bx + ref.current.position.x;
+      const curWz = bz + ref.current.position.z;
+      // In flat mode, world Y for the avatar's feet:
+      const curWy = sphereModeRef.current >= 0.5
+        ? ref.current.position.y   // sphere mode: Y is stored in ref
+        : (localGroundY + platformLift + jumpY); // flat mode: derived from lift
+
+      // Distance from player to sphere center
+      const dx = curWx - ms.cx;
+      const dy = curWy - ms.cy;
+      const dz = curWz - ms.cz;
+      const distToCenter = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+      // Sphere mode entry/exit thresholds
+      const SPHERE_ENTRY_DIST = 80;   // enter sphere mode when within 80 units of surface
+      const SPHERE_EXIT_DIST  = 300;  // exit sphere mode when > 300 units from surface
+      const surfData = getSphereSurfaceData(curWx, curWy, curWz);
+      const distFromSurf = surfData ? surfData.distFromSurface : 9999;
+
+      // Entry/exit with hysteresis
+      if (sphereModeRef.current < 0.5 && Math.abs(distFromSurf) < SPHERE_ENTRY_DIST) {
+        // ── ENTER sphere mode ──
+        sphereModeRef.current = 1;
+        // Transfer current position into sphere-mode ref.position.y
+        ref.current.position.y = curWy;
+        // Set platformLift to compensate for avatar's baked groundY offset
+        // so the avatar's feet sit exactly at the ref group's local origin
+        setPlatformLift(-localGroundY);
+        // Convert current jumpY into radial offset from surface
+        setJumpY(Math.max(0, distFromSurf));
+        jumpVyRef.current = 0;
+      } else if (sphereModeRef.current >= 0.5 && Math.abs(distFromSurf) > SPHERE_EXIT_DIST) {
+        // ── EXIT sphere mode ──
+        sphereModeRef.current = 0;
+        // Reset quaternion to Euler-compatible rotation
+        ref.current.quaternion.identity();
+        ref.current.rotation.y = yawRef.current || 0;
+        // Transfer sphere 3D position back into flat-mode paradigm
+        ref.current.position.y = 0;
+        // Convert world Y back into platformLift + jumpY for flat mode
+        const flatGroundH = getGroundHeightXZAtY(curWx, curWz, curWy);
+        setPlatformLift(flatGroundH);
+        const newJumpY = Math.max(0, curWy - (localGroundY + flatGroundH));
+        setJumpY(newJumpY);
+        if (newJumpY > 0.01 && !isJumping) setIsJumping(true);
+      }
+
+      // ── Process sphere-mode physics ──
+      if (sphereModeRef.current >= 0.5 && surfData) {
+        sphereHandled = true;
+        const sn = surfData.surfaceNormal;
+        const sp = surfData.surfacePoint;
+        const surfNormal = _tmpV3a.set(sn[0], sn[1], sn[2]);
+        sphereUpRef.current.copy(surfNormal);
+
+        // Build orientation quaternion: align local Y to surface normal, then rotate by yaw
+        _tmpQ1.setFromUnitVectors(_Y_AXIS, surfNormal);
+        _tmpQ2.setFromAxisAngle(surfNormal, effYaw);
+        sphereQRef.current.copy(_tmpQ2).multiply(_tmpQ1);
+        ref.current.quaternion.copy(sphereQRef.current);
+
+        // ── Movement in tangent plane ──
+        const inputMag = Math.min(1, Math.sqrt(moving * moving + strafing * strafing));
+        if (inputMag > 0.001) {
+          // Forward and right directions in tangent plane (derived from sphere orientation)
+          const fwd3D = _tmpV3a.set(0, 0, -1).applyQuaternion(sphereQRef.current);
+          const right3D = _tmpV3b.set(1, 0, 0).applyQuaternion(sphereQRef.current);
+          // Combined movement direction
+          const dirX = fwd3D.x * moving + right3D.x * strafing;
+          const dirY = fwd3D.y * moving + right3D.y * strafing;
+          const dirZ = fwd3D.z * moving + right3D.z * strafing;
+          const dirLen = Math.sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
+          const ndx = dirLen > 0.001 ? dirX / dirLen : 0;
+          const ndy = dirLen > 0.001 ? dirY / dirLen : 0;
+          const ndz = dirLen > 0.001 ? dirZ / dirLen : 0;
+
+          // Compute step size (same as flat mode)
+          let step;
+          if (isJetpackingRef.current) {
+            const jetSpdBase = JETPACK_AIR_SPEED_MUL + inputMag * (JETPACK_FWD_SPEED_BOOST - JETPACK_AIR_SPEED_MUL);
+            const boostMul = jetpackBoostActive ? JETPACK_BOOST_MUL : 1.0;
+            step = speed * jetSpdBase * boostMul * inputMag * dt;
+          } else {
+            const speedMul = runningNow ? 2.0 : 1.0;
+            step = speed * speedMul * dt * inputMag;
+          }
+
+          // Move along tangent plane
+          const movedX = curWx + ndx * step;
+          const movedY = curWy + ndy * step;
+          const movedZ = curWz + ndz * step;
+
+          // Project back onto sphere surface
+          const pdx = movedX - ms.cx;
+          const pdy = movedY - ms.cy;
+          const pdz = movedZ - ms.cz;
+          const pDist = Math.sqrt(pdx * pdx + pdy * pdy + pdz * pdz);
+          if (pDist > 0.001) {
+            const pnx = pdx / pDist;
+            const pny = pdy / pDist;
+            const pnz = pdz / pDist;
+            const bump = sphereBumpAt(pnx, pny, pnz);
+            const surfR = ms.radius + bump;
+            // Position ref at surface point (jumpY is handled by avatar's extraLiftY)
+            const newX = ms.cx + pnx * surfR;
+            const newY = ms.cy + pny * surfR;
+            const newZ = ms.cz + pnz * surfR;
+            ref.current.position.x = newX - bx;
+            ref.current.position.y = newY;
+            ref.current.position.z = newZ - bz;
+          }
+        }
+
+        // ── Radial gravity / jump physics on sphere ──
+        const sphereGrounded = (jumpY <= 0.001);
+        if (isJumping || jumpY > 0.001) {
+          let vy;
+          if (isJetpackingRef.current) {
+            const jetInput = Math.max((pressed.current['f'] || pressed.current['F']) ? 1.0 : 0, jetpackRtAnalogRef.current);
+            if (jetInput > 0.1) {
+              vy = jumpVyRef.current + (JETPACK_THRUST * jetInput + JETPACK_GRAVITY) * dt;
+            } else {
+              vy = jumpVyRef.current + JETPACK_GRAVITY * dt;
+            }
+            vy = Math.max(-JETPACK_MAX_VY, Math.min(JETPACK_MAX_VY, vy));
+            const hasStickInput = Math.abs(moving) > 0.15 || Math.abs(strafing) > 0.15;
+            const descending = vy < -1;
+            setIsFalling(descending && !hasStickInput && (Math.max((pressed.current['f'] || pressed.current['F']) ? 1.0 : 0, jetpackRtAnalogRef.current) < 0.1));
+          } else {
+            vy = jumpVyRef.current + curGravityRef.current * dt;
+          }
+          let y = jumpY + vy * dt;
+
+          // Landing on sphere surface
+          if (y <= 0) {
+            y = 0; vy = 0;
+            setIsJumping(false); setIsFalling(false);
+            if (isJetpackingRef.current) {
+              isJetpackingRef.current = false;
+              jetpackVxRef.current = 0; jetpackVzRef.current = 0;
+              if (jetpackLandTimerRef.current) clearTimeout(jetpackLandTimerRef.current);
+              setIsJetpacking(false);
+            }
+          }
+          jumpVyRef.current = vy;
+          if (Math.abs(y - jumpY) > 0.00001) setJumpY(y);
+
+          // Update ref.position for new jumpY
+          const reSurf = getSphereSurfaceData(
+            bx + ref.current.position.x,
+            ref.current.position.y,
+            bz + ref.current.position.z
+          );
+          if (reSurf) {
+            const rsn = reSurf.surfaceNormal;
+            const rsp = reSurf.surfacePoint;
+            // Keep ref at surface point; jumpY offset is handled by avatar extraLiftY
+            ref.current.position.x = rsp[0] - bx;
+            ref.current.position.y = rsp[1];
+            ref.current.position.z = rsp[2] - bz;
+          }
+        }
+
+        // No movement → still re-project onto sphere each frame (in case we just entered)
+        if (inputMag <= 0.001 && jumpY <= 0.001 && !isJumping) {
+          const reSurf2 = getSphereSurfaceData(
+            bx + ref.current.position.x,
+            ref.current.position.y,
+            bz + ref.current.position.z
+          );
+          if (reSurf2) {
+            ref.current.position.x = reSurf2.surfacePoint[0] - bx;
+            ref.current.position.y = reSurf2.surfacePoint[1];
+            ref.current.position.z = reSurf2.surfacePoint[2] - bz;
+          }
+        }
+      } // end sphere physics
+    } // end if (ms)
+  } // end sphere mode block
+
+  // ══════════════════════════════════════════════════════════════════
+  // ── FLAT MODE: normal terrain movement (skipped if sphere handled)
+  // ══════════════════════════════════════════════════════════════════
+  if (!sphereHandled) {
 
   // Apply forward/back + strafe movement using facing direction
     // effYaw already contains camera yaw in FPS mode, character yaw in 3rd person
@@ -2464,6 +2671,7 @@ export function PlayerMover({ firstPersonMode = false, setFirstPersonMode = null
         ref.current.rotation.y = cur;
       }
     }
+    } // ── end if (!sphereHandled) — flat mode block ──
     // Publish world position and yaw (baseOffset + local). Also publish when yaw changes while standing still.
     if (ref.current) {
       // Displacement-based walking detection (covers all motion sources)
@@ -2488,8 +2696,16 @@ export function PlayerMover({ firstPersonMode = false, setFirstPersonMode = null
   // In FPS mode the player is inherently aiming (holding rifle), so remote players see rifle stance
   const aimingNow = !!(firstPersonMode || weaponSystem.isAiming);
   // Publish local avatar pose globally for follow camera (uses base yaw, CameraFollower adds orbit)
+  const _sphereOn = sphereModeRef.current >= 0.5;
+  const _sphereUpArr = _sphereOn ? [sphereUpRef.current.x, sphereUpRef.current.y, sphereUpRef.current.z] : null;
+  // In sphere mode, compute the player's actual 3D position (surface + jumpY along normal)
+  const _spherePlayerPos = _sphereOn ? [
+    wx + sphereUpRef.current.x * jumpY,
+    ref.current.position.y + sphereUpRef.current.y * jumpY,
+    wz + sphereUpRef.current.z * jumpY
+  ] : null;
   try {
-    window.__CF_LOCAL_AVATAR__ = { x: wx, z: wz, yaw: localYaw, isRunning: runningNow, isWalking: !!(isWalking || isWalkingBackward || isStrafeLeft || isStrafeRight), isJumping: !!isJumping, isJetpacking: !!isJetpackingRef.current, jetpackFuel: jetpackFuelRef.current, isBoost: !!jetpackBoostActive, lift: (platformLift + jumpY), jetpackTiltX: jetpackTiltXRef.current, jetpackTiltZ: jetpackTiltZRef.current, isShooting: !!isShootingRef.current, isAiming: aimingNow, isScoping: !!weaponSystem.isAiming, isWalkingBackward, isStrafeLeft, isStrafeRight, isDead: !!weaponSystem.isDead, pitch: window.__CF_CAM_V_ANGLE__ || 0 };
+    window.__CF_LOCAL_AVATAR__ = { x: wx, z: wz, yaw: localYaw, isRunning: runningNow, isWalking: !!(isWalking || isWalkingBackward || isStrafeLeft || isStrafeRight), isJumping: !!isJumping, isJetpacking: !!isJetpackingRef.current, jetpackFuel: jetpackFuelRef.current, isBoost: !!jetpackBoostActive, lift: (platformLift + jumpY), jetpackTiltX: jetpackTiltXRef.current, jetpackTiltZ: jetpackTiltZRef.current, isShooting: !!isShootingRef.current, isAiming: aimingNow, isScoping: !!weaponSystem.isAiming, isWalkingBackward, isStrafeLeft, isStrafeRight, isDead: !!weaponSystem.isDead, pitch: window.__CF_CAM_V_ANGLE__ || 0, sphereMode: _sphereOn ? 1 : 0, sphereUp: _sphereUpArr, spherePlayerPos: _spherePlayerPos };
     window.__CF_COLLISION_FWD__ = COLLISION_FWD_OFFSET;
   } catch {}
       const t = performance.now();

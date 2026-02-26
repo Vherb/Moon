@@ -1,5 +1,5 @@
 {
-  "savedAt": 1772130248628,
+  "savedAt": 1772132449213,
   "rooms": [
     {
       "code": "MOON-5Y6P",
@@ -8,16 +8,16 @@
       "hostId": 14,
       "hostUsername": "poop",
       "createdAt": 1772125832816,
-      "lastActivity": 1772130248120,
+      "lastActivity": 1772132448700,
       "players": [
         {
-          "socketId": "493c5dd2",
+          "socketId": "e7d838a0",
           "userId": 14,
           "username": "poop",
           "character": "astronaut",
           "avatar": "rocket",
           "color": "#6366f1",
-          "joinedAt": 1772130243888
+          "joinedAt": 1772132448700
         }
       ],
       "placedCubes": [],

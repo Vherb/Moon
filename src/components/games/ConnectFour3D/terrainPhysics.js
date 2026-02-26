@@ -40,6 +40,51 @@ export function sphereBumpAt(nx, ny, nz) {
   return _sFbm(u1 * 0.015, v1 * 0.015, 4) * 12 + _sFbm(u1 * 0.008, v1 * 0.008, 3) * 20;
 }
 
+/**
+ * Full-sphere surface data for spherical gravity mode.
+ * Given a 3D world-space point, projects it onto the moon sphere surface
+ * and returns the surface normal, surface point, and signed distance.
+ * Works for the ENTIRE sphere (all directions from center).
+ */
+export function getSphereSurfaceData(wx, wy, wz) {
+  if (!GIANT_MOON_SPHERE) return null;
+  const ms = GIANT_MOON_SPHERE;
+  const dx = wx - ms.cx;
+  const dy = wy - ms.cy;
+  const dz = wz - ms.cz;
+  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (dist < 0.001) {
+    // At the exact center — degenerate, return default up
+    return {
+      inRange: true,
+      surfaceNormal: [0, 1, 0],
+      surfacePoint: [ms.cx, ms.cy + ms.radius, ms.cz],
+      surfaceRadius: ms.radius,
+      distFromCenter: 0,
+      distFromSurface: -ms.radius
+    };
+  }
+  // Unit normal from center to point
+  const nx = dx / dist;
+  const ny = dy / dist;
+  const nz = dz / dist;
+  // Bump at this direction (matches GiantMoonSphere geometry displacement)
+  const bump = sphereBumpAt(nx, ny, nz);
+  const surfR = ms.radius + bump;
+  // Surface point in world space
+  const sx = ms.cx + nx * surfR;
+  const sy = ms.cy + ny * surfR;
+  const sz = ms.cz + nz * surfR;
+  return {
+    inRange: dist < surfR + 500,
+    surfaceNormal: [nx, ny, nz],
+    surfacePoint: [sx, sy, sz],
+    surfaceRadius: surfR,
+    distFromCenter: dist,
+    distFromSurface: dist - surfR  // positive = above surface, negative = inside
+  };
+}
+
 // Shared terrain height calculation (matches the LunarTerrain geometry)
 export function getTerrainHeightXZ(x, z, flatRadius = 50, maxRadius = TERRAIN_RADIUS) {
   // SQUARE boundary check - fall off if outside square terrain

@@ -3270,6 +3270,78 @@ function ConnectFour3DView({ board, lastMove, colors, onSelectColumn, flip180 = 
         
         const CAMERA_HEIGHT = firstPersonMode ? fpCamHeight : cameraHeight; // Head level in 1st person
         
+        // ── Sphere mode camera ──
+        const isSphereMode = !!(msg.sphereMode && msg.sphereUp && msg.spherePlayerPos);
+        if (isSphereMode) {
+          // Surface-normal-aligned camera
+          const sUp = new THREE.Vector3(msg.sphereUp[0], msg.sphereUp[1], msg.sphereUp[2]);
+          camera.up.copy(sUp);
+
+          // Player world position (3D) including jumpY offset
+          const playerPos3D = new THREE.Vector3(msg.spherePlayerPos[0], msg.spherePlayerPos[1], msg.spherePlayerPos[2]);
+
+          // Camera target = player position + surface-up offset (look at mid-body)
+          const BODY_HEIGHT = 4.0;
+          const targetPos = playerPos3D.clone().addScaledVector(sUp, BODY_HEIGHT);
+
+          // Camera behind-offset: compute "behind" direction in tangent plane
+          const yaw = (typeof msg.yaw === 'number') ? msg.yaw : 0;
+          const behindYaw = isPlayer2 ? (yaw + Math.PI) : yaw;
+          const totalYaw = behindYaw + horizontalAngle.current;
+
+          // Build tangent-plane forward from surface quaternion
+          const q1 = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), sUp);
+          const q2 = new THREE.Quaternion().setFromAxisAngle(sUp, totalYaw);
+          const sphereQ = q2.multiply(q1);
+          const camForward = new THREE.Vector3(0, 0, -1).applyQuaternion(sphereQ);
+
+          // Camera position: behind and above player (in surface-local frame)
+          const lookUpAmount = Math.max(0, verticalAngle.current);
+          const heightAdj = CAMERA_HEIGHT - (lookUpAmount * 10);
+          const desiredCameraPos = targetPos.clone()
+            .addScaledVector(sUp, heightAdj)
+            .addScaledVector(camForward, -CAMERA_DISTANCE);
+
+          // Smooth lerp
+          let alpha = Math.min(1, dt * 3.0);
+          if (settingsChanged.current || isFirstFrame.current || firstPersonMode) {
+            smoothPos.current.copy(desiredCameraPos);
+            settingsChanged.current = false;
+            isFirstFrame.current = false;
+            alpha = 1;
+          } else {
+            smoothPos.current.lerp(desiredCameraPos, alpha);
+          }
+          camera.position.copy(smoothPos.current);
+
+          if (firstPersonMode) {
+            // FPS on sphere — use quaternion-based rotation instead of flat Euler
+            // For now, fall through to lookAt since FPS on sphere is complex
+            camera.lookAt(targetPos);
+            window.__CF_FPS_CAMERA_YAW__ = totalYaw;
+            window.__CF_FPS_CAM_POS__ = [smoothPos.current.x, smoothPos.current.y, smoothPos.current.z];
+          } else {
+            camera.lookAt(targetPos);
+          }
+
+          // Update orbit controls
+          const ctrl = controlsRef.current;
+          if (ctrl && !firstPersonMode) {
+            ctrl.target.lerp(targetPos, alpha);
+            ctrl.update();
+          }
+
+          // Persist state
+          window.__CF_CAM_H_ANGLE__ = horizontalAngle.current;
+          window.__CF_CAM_V_ANGLE__ = verticalAngle.current;
+          window.__CF_CAM_SMOOTH_POS__ = smoothPos.current;
+          window.__CF_CAM_LAST_POS__ = lastPosition.current;
+          return; // skip flat-mode camera logic
+        }
+
+        // ── Flat mode: reset camera.up to default ──
+        camera.up.set(0, 1, 0);
+
         // Calculate target position (character's position)
         const feetLift = Number(msg.lift || 0);
         const baseY = ((ROWS * (CELL + GAP) - GAP) + 0.6) / 2 - GROUND_CLEAR;
