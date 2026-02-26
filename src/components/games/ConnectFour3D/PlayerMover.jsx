@@ -1324,8 +1324,11 @@ export function PlayerMover({ firstPersonMode = false, setFirstPersonMode = null
         _flatQ.setFromAxisAngle(_Y_AXIS, effYaw);
 
         // Slerp between flat and sphere orientation based on blend
+        // Use a dampened curve (blend^3) so orientation barely changes during approach
+        // and only really kicks in once nearly grounded
         if (blend > 0.01) {
-          _flatQ.slerp(sphereQRef.current, blend);
+          const bodyBlend = blend * blend * blend; // cubic ease-in: 0.5→0.125, 0.8→0.512
+          _flatQ.slerp(sphereQRef.current, bodyBlend);
           ref.current.quaternion.copy(_flatQ);
         }
       }

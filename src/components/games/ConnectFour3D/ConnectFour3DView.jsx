@@ -3038,6 +3038,7 @@ function ConnectFour3DView({ board, lastMove, colors, onSelectColumn, flip180 = 
     const lastPosition = useRef(window.__CF_CAM_LAST_POS__ || { x: 0, z: 0 });
     const isMoving = useRef(false);
     const wasFollowingRocket = useRef(false);
+    const camUpBlend = useRef(0);   // camera's own slow sphere-up blend (independent from player blend)
     const lastCameraDistance = useRef(cameraDistance);
     const lastCameraHeight = useRef(cameraHeight);
     const isFirstFrame = useRef(true);
@@ -3271,14 +3272,21 @@ function ConnectFour3DView({ board, lastMove, colors, onSelectColumn, flip180 = 
         const CAMERA_HEIGHT = firstPersonMode ? fpCamHeight : cameraHeight; // Head level in 1st person
         
         // ── Sphere mode camera (smooth blend) ──
-        const sphereBlend = msg.sphereBlend || 0;
-        const hasSphereData = !!(msg.sphereUp && sphereBlend > 0.01);
-        
-        if (hasSphereData) {
-          // Smoothly blend camera.up between (0,1,0) and the surface normal
+        // Camera.up uses its OWN very slow blend, independent from the player physics blend.
+        // It only starts advancing once the player is actually grounded in sphere mode,
+        // preventing the violent camera flip during approach.
+        const isSphereModeFull = !!(msg.sphereMode && msg.sphereUp && msg.spherePlayerPos);
+        const CAM_UP_BLEND_IN  = 0.25;  // ~4 seconds to fully align (very gentle)
+        const CAM_UP_BLEND_OUT = 0.5;   // ~2 seconds to return to flat
+        if (isSphereModeFull) {
+          camUpBlend.current = Math.min(1, camUpBlend.current + CAM_UP_BLEND_IN * dt);
+        } else {
+          camUpBlend.current = Math.max(0, camUpBlend.current - CAM_UP_BLEND_OUT * dt);
+        }
+        if (msg.sphereUp && camUpBlend.current > 0.001) {
           const sUp = new THREE.Vector3(msg.sphereUp[0], msg.sphereUp[1], msg.sphereUp[2]);
           const flatUp = new THREE.Vector3(0, 1, 0);
-          const blendedUp = flatUp.lerp(sUp, sphereBlend).normalize();
+          const blendedUp = flatUp.lerp(sUp, camUpBlend.current).normalize();
           camera.up.copy(blendedUp);
         } else {
           camera.up.set(0, 1, 0);
