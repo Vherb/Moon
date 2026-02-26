@@ -65,6 +65,8 @@ export function PlayerMover({ firstPersonMode = false, setFirstPersonMode = null
   const [isFalling, setIsFalling] = useState(false); // true when descending during jetpack → triggers jump/fall anim
   // ── Sphere mode state (spherical gravity on the giant moon) ──
   const sphereModeRef = useRef(0);                          // 0 = flat terrain, 1 = on sphere
+  const sphereBlendRef = useRef(0);                          // gradual 0→1 blend for smooth transition
+  const sphereTargetRef = useRef(0);                         // target blend value (0 or 1)
   const sphereUpRef = useRef(new THREE.Vector3(0, 1, 0));   // surface normal (world space)
   const sphereQRef = useRef(new THREE.Quaternion());         // cached sphere orientation quaternion
   const _Y_AXIS = useMemo(() => new THREE.Vector3(0, 1, 0), []);
@@ -72,6 +74,7 @@ export function PlayerMover({ firstPersonMode = false, setFirstPersonMode = null
   const _tmpV3b = useMemo(() => new THREE.Vector3(), []);
   const _tmpQ1 = useMemo(() => new THREE.Quaternion(), []);
   const _tmpQ2 = useMemo(() => new THREE.Quaternion(), []);
+  const _flatQ = useMemo(() => new THREE.Quaternion(), []);  // for blending flat↔sphere orientation
   // Platform support: allow landing on the tabletop and staying there
   const fhForGround = ROWS * (CELL + GAP) - GAP + 0.6;
   const localGroundY = -fhForGround / 2 - GROUND_CLEAR;
@@ -1150,7 +1153,8 @@ export function PlayerMover({ firstPersonMode = false, setFirstPersonMode = null
       ? (window.__CF_FPS_CAMERA_YAW__ ?? yawRef.current ?? 0)
       : (yawRef.current || 0);
     // In sphere mode, orientation is set via quaternion — don't overwrite with Euler yaw
-    if (sphereModeRef.current < 0.5) {
+    // During transition (blend between 0 and 1), we handle rotation in the sphere block
+    if (sphereBlendRef.current < 0.01) {
       ref.current.rotation.y = effYaw;
     }
     // Update turning state flags for animations - disabled in FPS and when menu open
@@ -1247,52 +1251,88 @@ export function PlayerMover({ firstPersonMode = false, setFirstPersonMode = null
       const distToCenter = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
       // Sphere mode entry/exit thresholds
-      const SPHERE_ENTRY_DIST = 80;   // enter sphere mode when within 80 units of surface
-      const SPHERE_EXIT_DIST  = 300;  // exit sphere mode when > 300 units from surface
+      const SPHERE_ENTRY_DIST = 120;   // start blending when within 120 units of surface
+      const SPHERE_EXIT_DIST  = 200;   // start blending out when > 200 units from surface
+      const SPHERE_BLEND_SPEED = 0.8;  // blend speed (0→1 in ~1.25 seconds)
       const surfData = getSphereSurfaceData(curWx, curWy, curWz);
       const distFromSurf = surfData ? surfData.distFromSurface : 9999;
 
-      // Entry/exit with hysteresis
-      if (sphereModeRef.current < 0.5 && Math.abs(distFromSurf) < SPHERE_ENTRY_DIST) {
-        // ── ENTER sphere mode ──
+      // Set blend target based on distance
+      if (Math.abs(distFromSurf) < SPHERE_ENTRY_DIST) {
+        sphereTargetRef.current = 1; // want to be in sphere mode
+      } else if (Math.abs(distFromSurf) > SPHERE_EXIT_DIST) {
+        sphereTargetRef.current = 0; // want to leave sphere mode
+      }
+      // Gradually lerp blend toward target
+      const prevBlend = sphereBlendRef.current;
+      const target = sphereTargetRef.current;
+      if (Math.abs(prevBlend - target) > 0.001) {
+        sphereBlendRef.current += (target - prevBlend) * Math.min(1, SPHERE_BLEND_SPEED * dt);
+        if (Math.abs(sphereBlendRef.current - target) < 0.005) sphereBlendRef.current = target;
+      }
+      const blend = sphereBlendRef.current;
+
+      // Hard switch for physics mode (which coordinate system to use)
+      // Physics switches at blend=0.5, but orientation/camera blend smoothly
+      if (sphereModeRef.current < 0.5 && blend >= 0.5) {
+        // ── ENTER sphere physics ──
         sphereModeRef.current = 1;
-        // Transfer current position into sphere-mode ref.position.y
         ref.current.position.y = curWy;
-        // Set platformLift to compensate for avatar's baked groundY offset
-        // so the avatar's feet sit exactly at the ref group's local origin
         setPlatformLift(-localGroundY);
-        // Convert current jumpY into radial offset from surface
         setJumpY(Math.max(0, distFromSurf));
-        jumpVyRef.current = 0;
-      } else if (sphereModeRef.current >= 0.5 && Math.abs(distFromSurf) > SPHERE_EXIT_DIST) {
-        // ── EXIT sphere mode ──
+        jumpVyRef.current = jumpVyRef.current; // keep current velocity for smooth transition
+      } else if (sphereModeRef.current >= 0.5 && blend < 0.5) {
+        // ── EXIT sphere physics ──
         sphereModeRef.current = 0;
-        // Reset quaternion to Euler-compatible rotation
+        // Transfer sphere 3D position back into flat-mode paradigm
+        const savedY = ref.current.position.y;
+        ref.current.position.y = 0;
         ref.current.quaternion.identity();
         ref.current.rotation.y = yawRef.current || 0;
-        // Transfer sphere 3D position back into flat-mode paradigm
-        ref.current.position.y = 0;
         // Convert world Y back into platformLift + jumpY for flat mode
-        const flatGroundH = getGroundHeightXZAtY(curWx, curWz, curWy);
-        setPlatformLift(flatGroundH);
-        const newJumpY = Math.max(0, curWy - (localGroundY + flatGroundH));
-        setJumpY(newJumpY);
-        if (newJumpY > 0.01 && !isJumping) setIsJumping(true);
+        const flatGroundH = getGroundHeightXZAtY(curWx, curWz, savedY);
+        // If we're high above flat ground, start a fall
+        const heightAboveGround = savedY - (localGroundY + flatGroundH);
+        if (heightAboveGround > 2.0) {
+          // High up: start falling from current height
+          setPlatformLift(0);
+          setJumpY(savedY - localGroundY);
+          jumpVyRef.current = jumpVyRef.current; // preserve downward velocity
+          curGravityRef.current = GRAVITY_FALL;
+          if (!isJumping) setIsJumping(true);
+        } else {
+          // Close to ground: just snap to ground
+          setPlatformLift(flatGroundH);
+          setJumpY(0);
+          jumpVyRef.current = 0;
+        }
+      }
+
+      // ── Compute sphere orientation (always, for smooth blending) ──
+      if (surfData) {
+        const sn = surfData.surfaceNormal;
+        const surfNormal = _tmpV3a.set(sn[0], sn[1], sn[2]);
+        sphereUpRef.current.lerp(surfNormal, Math.min(1, 6 * dt)); // smooth normal transition
+        sphereUpRef.current.normalize();
+
+        // Build sphere orientation quaternion
+        _tmpQ1.setFromUnitVectors(_Y_AXIS, sphereUpRef.current);
+        _tmpQ2.setFromAxisAngle(sphereUpRef.current, effYaw);
+        sphereQRef.current.copy(_tmpQ2).multiply(_tmpQ1);
+
+        // Build flat orientation quaternion (just yaw around world Y)
+        _flatQ.setFromAxisAngle(_Y_AXIS, effYaw);
+
+        // Slerp between flat and sphere orientation based on blend
+        if (blend > 0.01) {
+          _flatQ.slerp(sphereQRef.current, blend);
+          ref.current.quaternion.copy(_flatQ);
+        }
       }
 
       // ── Process sphere-mode physics ──
       if (sphereModeRef.current >= 0.5 && surfData) {
         sphereHandled = true;
-        const sn = surfData.surfaceNormal;
-        const sp = surfData.surfacePoint;
-        const surfNormal = _tmpV3a.set(sn[0], sn[1], sn[2]);
-        sphereUpRef.current.copy(surfNormal);
-
-        // Build orientation quaternion: align local Y to surface normal, then rotate by yaw
-        _tmpQ1.setFromUnitVectors(_Y_AXIS, surfNormal);
-        _tmpQ2.setFromAxisAngle(surfNormal, effYaw);
-        sphereQRef.current.copy(_tmpQ2).multiply(_tmpQ1);
-        ref.current.quaternion.copy(sphereQRef.current);
 
         // ── Movement in tangent plane ──
         const inputMag = Math.min(1, Math.sqrt(moving * moving + strafing * strafing));
@@ -2697,7 +2737,8 @@ export function PlayerMover({ firstPersonMode = false, setFirstPersonMode = null
   const aimingNow = !!(firstPersonMode || weaponSystem.isAiming);
   // Publish local avatar pose globally for follow camera (uses base yaw, CameraFollower adds orbit)
   const _sphereOn = sphereModeRef.current >= 0.5;
-  const _sphereUpArr = _sphereOn ? [sphereUpRef.current.x, sphereUpRef.current.y, sphereUpRef.current.z] : null;
+  const _sphereBlend = sphereBlendRef.current;
+  const _sphereUpArr = (_sphereBlend > 0.01) ? [sphereUpRef.current.x, sphereUpRef.current.y, sphereUpRef.current.z] : null;
   // In sphere mode, compute the player's actual 3D position (surface + jumpY along normal)
   const _spherePlayerPos = _sphereOn ? [
     wx + sphereUpRef.current.x * jumpY,
@@ -2705,7 +2746,7 @@ export function PlayerMover({ firstPersonMode = false, setFirstPersonMode = null
     wz + sphereUpRef.current.z * jumpY
   ] : null;
   try {
-    window.__CF_LOCAL_AVATAR__ = { x: wx, z: wz, yaw: localYaw, isRunning: runningNow, isWalking: !!(isWalking || isWalkingBackward || isStrafeLeft || isStrafeRight), isJumping: !!isJumping, isJetpacking: !!isJetpackingRef.current, jetpackFuel: jetpackFuelRef.current, isBoost: !!jetpackBoostActive, lift: (platformLift + jumpY), jetpackTiltX: jetpackTiltXRef.current, jetpackTiltZ: jetpackTiltZRef.current, isShooting: !!isShootingRef.current, isAiming: aimingNow, isScoping: !!weaponSystem.isAiming, isWalkingBackward, isStrafeLeft, isStrafeRight, isDead: !!weaponSystem.isDead, pitch: window.__CF_CAM_V_ANGLE__ || 0, sphereMode: _sphereOn ? 1 : 0, sphereUp: _sphereUpArr, spherePlayerPos: _spherePlayerPos };
+    window.__CF_LOCAL_AVATAR__ = { x: wx, z: wz, yaw: localYaw, isRunning: runningNow, isWalking: !!(isWalking || isWalkingBackward || isStrafeLeft || isStrafeRight), isJumping: !!isJumping, isJetpacking: !!isJetpackingRef.current, jetpackFuel: jetpackFuelRef.current, isBoost: !!jetpackBoostActive, lift: (platformLift + jumpY), jetpackTiltX: jetpackTiltXRef.current, jetpackTiltZ: jetpackTiltZRef.current, isShooting: !!isShootingRef.current, isAiming: aimingNow, isScoping: !!weaponSystem.isAiming, isWalkingBackward, isStrafeLeft, isStrafeRight, isDead: !!weaponSystem.isDead, pitch: window.__CF_CAM_V_ANGLE__ || 0, sphereMode: _sphereOn ? 1 : 0, sphereBlend: _sphereBlend, sphereUp: _sphereUpArr, spherePlayerPos: _spherePlayerPos };
     window.__CF_COLLISION_FWD__ = COLLISION_FWD_OFFSET;
   } catch {}
       const t = performance.now();

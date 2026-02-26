@@ -3270,12 +3270,24 @@ function ConnectFour3DView({ board, lastMove, colors, onSelectColumn, flip180 = 
         
         const CAMERA_HEIGHT = firstPersonMode ? fpCamHeight : cameraHeight; // Head level in 1st person
         
-        // ── Sphere mode camera ──
+        // ── Sphere mode camera (smooth blend) ──
+        const sphereBlend = msg.sphereBlend || 0;
+        const hasSphereData = !!(msg.sphereUp && sphereBlend > 0.01);
+        
+        if (hasSphereData) {
+          // Smoothly blend camera.up between (0,1,0) and the surface normal
+          const sUp = new THREE.Vector3(msg.sphereUp[0], msg.sphereUp[1], msg.sphereUp[2]);
+          const flatUp = new THREE.Vector3(0, 1, 0);
+          const blendedUp = flatUp.lerp(sUp, sphereBlend).normalize();
+          camera.up.copy(blendedUp);
+        } else {
+          camera.up.set(0, 1, 0);
+        }
+
         const isSphereMode = !!(msg.sphereMode && msg.sphereUp && msg.spherePlayerPos);
         if (isSphereMode) {
-          // Surface-normal-aligned camera
+          // Surface-normal-aligned camera (full sphere mode)
           const sUp = new THREE.Vector3(msg.sphereUp[0], msg.sphereUp[1], msg.sphereUp[2]);
-          camera.up.copy(sUp);
 
           // Player world position (3D) including jumpY offset
           const playerPos3D = new THREE.Vector3(msg.spherePlayerPos[0], msg.spherePlayerPos[1], msg.spherePlayerPos[2]);
@@ -3339,8 +3351,7 @@ function ConnectFour3DView({ board, lastMove, colors, onSelectColumn, flip180 = 
           return; // skip flat-mode camera logic
         }
 
-        // ── Flat mode: reset camera.up to default ──
-        camera.up.set(0, 1, 0);
+        // camera.up is already set by the blended code above
 
         // Calculate target position (character's position)
         const feetLift = Number(msg.lift || 0);
