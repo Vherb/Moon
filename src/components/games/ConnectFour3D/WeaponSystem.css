@@ -1,0 +1,363 @@
+/* Weapon System UI Styles */
+
+/* Hit marker fade animation */
+@keyframes hitMarkerFade {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+}
+
+/* Pulse animation for low ammo warning */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Crosshair animations */
+.crosshair-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 1000;
+  transition: all 0.1s ease;
+}
+
+.crosshair-aiming {
+  filter: drop-shadow(0 0 5px rgba(0, 255, 0, 0.8));
+}
+
+/* Damage numbers */
+@keyframes damageNumber {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-50px) scale(1.5);
+  }
+}
+
+.damage-number {
+  position: absolute;
+  font-size: 24px;
+  font-weight: bold;
+  color: #ff0000;
+  text-shadow: 
+    0 0 5px rgba(255, 0, 0, 0.8),
+    0 0 10px rgba(255, 0, 0, 0.6),
+    2px 2px 4px rgba(0, 0, 0, 0.8);
+  animation: damageNumber 1s ease-out forwards;
+  pointer-events: none;
+  z-index: 1002;
+}
+
+/* Health bar pulse when low */
+@keyframes healthPulse {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(255, 0, 0, 1);
+  }
+}
+
+.health-bar-low {
+  animation: healthPulse 1s infinite;
+}
+
+/* Reload indicator */
+@keyframes reloadSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.reload-indicator {
+  display: inline-block;
+  animation: reloadSpin 1s linear infinite;
+}
+
+/* Kill feed entry slide in */
+@keyframes killFeedSlide {
+  from {
+    opacity: 0;
+    transform: translateX(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.kill-feed-entry {
+  animation: killFeedSlide 0.3s ease-out;
+}
+
+/* Ammo counter glow when full */
+@keyframes ammoGlow {
+  0%, 100% {
+    text-shadow: 
+      2px 2px 4px rgba(0, 0, 0, 0.8),
+      0 0 10px rgba(0, 255, 0, 0.5);
+  }
+  50% {
+    text-shadow: 
+      2px 2px 4px rgba(0, 0, 0, 0.8),
+      0 0 20px rgba(0, 255, 0, 1);
+  }
+}
+
+.ammo-full {
+  animation: ammoGlow 2s infinite;
+}
+
+/* Weapon switch indicator */
+@keyframes weaponSwitch {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.weapon-switch {
+  animation: weaponSwitch 0.2s ease-out;
+}
+
+/* Scope/zoom overlay — sniper-style full-screen scope view */
+.scope-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10000;
+  transition: opacity 0.18s ease;
+}
+
+/* Dark vignette ring around scope lens */
+.scope-vignette {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  /* Circle diameter = viewport shortest side */
+  width: min(90vh, 90vw);
+  height: min(90vh, 90vw);
+  border-radius: 50%;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.92);
+  background: transparent;
+  border: 3px solid rgba(0, 200, 255, 0.15);
+}
+
+/* Subtle lens tint inside the scope circle */
+.scope-lens {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    transparent 60%,
+    rgba(0, 0, 0, 0.25) 100%
+  );
+}
+
+/* Crosshair lines */
+.scope-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(90vh, 90vw);
+  height: min(90vh, 90vw);
+}
+
+/* Horizontal line */
+.scope-crosshair::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: rgba(0, 255, 100, 0.45);
+  transform: translateY(-0.5px);
+}
+
+/* Vertical line */
+.scope-crosshair::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 10%;
+  bottom: 10%;
+  width: 1px;
+  background: rgba(0, 255, 100, 0.45);
+  transform: translateX(-0.5px);
+}
+
+/* Center dot */
+.scope-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 255, 100, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(0, 255, 100, 0.6);
+}
+
+/* Mil-dot range markers along crosshair */
+.scope-mil-h,
+.scope-mil-v {
+  position: absolute;
+  background: rgba(0, 255, 100, 0.35);
+}
+
+.scope-mil-h {
+  width: 6px;
+  height: 1px;
+  top: 50%;
+  transform: translateY(-0.5px);
+}
+
+.scope-mil-v {
+  width: 1px;
+  height: 6px;
+  left: 50%;
+  transform: translateX(-0.5px);
+}
+
+/* Muzzle flash screen effect */
+@keyframes muzzleFlashScreen {
+  from {
+    opacity: 0.3;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.muzzle-flash-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 200, 0, 0.3) 0%,
+    transparent 50%
+  );
+  pointer-events: none;
+  z-index: 997;
+  animation: muzzleFlashScreen 0.1s ease-out;
+}
+
+/* Screen shake effect */
+@keyframes screenShake {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  10% {
+    transform: translate(-2px, 1px);
+  }
+  20% {
+    transform: translate(2px, -1px);
+  }
+  30% {
+    transform: translate(-1px, 2px);
+  }
+  40% {
+    transform: translate(1px, -2px);
+  }
+  50% {
+    transform: translate(-2px, -1px);
+  }
+  60% {
+    transform: translate(2px, 1px);
+  }
+  70% {
+    transform: translate(-1px, -2px);
+  }
+  80% {
+    transform: translate(1px, 2px);
+  }
+  90% {
+    transform: translate(-1px, 1px);
+  }
+}
+
+.screen-shake {
+  animation: screenShake 0.2s ease-in-out;
+}
+
+/* Hit direction indicator */
+@keyframes hitDirection {
+  from {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+.hit-direction {
+  position: fixed;
+  width: 100px;
+  height: 100px;
+  pointer-events: none;
+  z-index: 999;
+  animation: hitDirection 0.5s ease-out forwards;
+}
+
+.hit-direction::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 0;
+  height: 0;
+  border-left: 30px solid transparent;
+  border-right: 30px solid transparent;
+  border-bottom: 50px solid rgba(255, 0, 0, 0.6);
+}
+
+/* Weapon sway effect (for 3D elements) */
+.weapon-sway {
+  transition: transform 0.1s ease-out;
+}
+
+/* Damage flash overlay fade */
+@keyframes damageFlashFade {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}

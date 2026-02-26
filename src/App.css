@@ -1,0 +1,71 @@
+@import './components/common/buttons.css';
+
+/* === Global fixes for safe-area & cutoff === */
+html, body, #root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;     /* Prevent board cutoff / sideways scrolling */
+  box-sizing: border-box;
+}
+
+*, *::before, *::after {
+  box-sizing: inherit;
+}
+
+/* Recommended meta tag in index.html:
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+*/
+
+/* === Existing App.css styles === */
+
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.App {
+  text-align: center;
+}
+
+h1 {
+  color: #333;
+  font-size: 36px;
+  margin-bottom: 20px;
+}
+
+p {
+  font-size: 15%;
+}
+
+/* Global animation speed variables (unify sweep/LED speeds site-wide) */
+:root {
+  --global-led-speed: 10s;     /* slower, unified default */
+  --led-speed: var(--global-led-speed);
+}
+
+.game-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+
+
+.coin-display { padding: 5px; border-radius: 4px; }
+
+/* Global button theme now comes from components/common/buttons.css */
+
+/* Hide footer when game is active */
+body.hide-footer footer,
+body.hide-footer .app-footer,
+body.hide-footer .theme-footer {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* card animations */
+/* (your animations would continue here) */

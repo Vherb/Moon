@@ -1,0 +1,421 @@
+/* src/components/rooms/RoomView.css — 3D world + overlay panels */
+
+.room-view {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  color: #e2e8f0;
+  overflow: hidden;
+}
+
+/* ---- 3D world fills entire screen ---- */
+.rv-3d-world {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.rv-3d-world > div {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ---- Overlay base ---- */
+.rv-overlay {
+  z-index: 100;
+  pointer-events: auto;
+}
+
+/* ---- Top bar ---- */
+.rv-topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(11, 18, 32, 0.75);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.rv-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rv-back-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: color 0.2s, background 0.2s;
+}
+.rv-back-btn:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.08);
+}
+.rv-room-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.rv-room-code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.78rem;
+  color: #8b5cf6;
+  letter-spacing: 1px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(139, 92, 246, 0.12);
+  transition: background 0.2s;
+}
+.rv-room-code:hover {
+  background: rgba(139, 92, 246, 0.25);
+}
+.rv-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rv-icon-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #e2e8f0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.rv-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.rv-leave-btn {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.rv-leave-btn:hover {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+/* ---- Sidebar overlay (togglable) ---- */
+.rv-sidebar {
+  position: fixed;
+  top: 48px;
+  left: 0;
+  bottom: 0;
+  width: 240px;
+  background: rgba(11, 18, 32, 0.88);
+  backdrop-filter: blur(12px);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 12px 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: slideFromLeft 0.15s ease-out;
+}
+@keyframes slideFromLeft {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+.rv-sidebar-header {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #64748b;
+  margin-bottom: 6px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.rv-close-panel {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.rv-close-panel:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.08);
+}
+.rv-player-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+.rv-player-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.rv-player-card.is-you {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+}
+.rv-player-info {
+  flex: 1;
+  min-width: 0;
+}
+.rv-player-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rv-player-role {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+.rv-player-online {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  flex-shrink: 0;
+}
+.rv-player-offline {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #475569;
+  flex-shrink: 0;
+}
+.rv-challenge-btn {
+  background: rgba(99, 102, 241, 0.2);
+  border: none;
+  color: #a5b4fc;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.rv-challenge-btn:hover {
+  background: rgba(99, 102, 241, 0.35);
+}
+
+/* ---- Challenge toast ---- */
+.rv-challenge-toast {
+  position: fixed;
+  top: 60px;
+  right: 16px;
+  background: rgba(30, 41, 59, 0.95);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 14px;
+  padding: 14px 18px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 240px;
+  animation: slideIn 0.2s ease-out;
+}
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.rv-challenge-toast-title {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.rv-challenge-toast-actions {
+  display: flex;
+  gap: 8px;
+}
+.rv-accept-btn {
+  background: #22c55e;
+  border: none;
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.rv-accept-btn:hover { background: #16a34a; }
+.rv-decline-btn {
+  background: rgba(239, 68, 68, 0.2);
+  border: none;
+  color: #fca5a5;
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.rv-decline-btn:hover { background: rgba(239, 68, 68, 0.35); }
+
+/* ---- Game HUD (top-center during C4 game) ---- */
+.rv-game-hud {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.rv-game-hud-inner {
+  background: rgba(11, 18, 32, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  white-space: nowrap;
+}
+.rv-game-hud-players {
+  display: flex;
+  gap: 10px;
+  font-size: 0.85rem;
+}
+.rv-game-hud-status {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.rv-rematch-btn {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: none;
+  color: #fff;
+  padding: 5px 14px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ---- Chat overlay (togglable) ---- */
+.rv-chat {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  width: 300px;
+  max-height: 340px;
+  background: rgba(11, 18, 32, 0.88);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  animation: fadeUp 0.15s ease-out;
+}
+@keyframes fadeUp {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.rv-chat-header {
+  padding: 8px 14px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #64748b;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.rv-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 240px;
+}
+.rv-chat-msg {
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+.rv-chat-msg .chat-name {
+  font-weight: 600;
+  margin-right: 4px;
+}
+.rv-chat-input-row {
+  display: flex;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.rv-chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  outline: none;
+}
+.rv-chat-input::placeholder {
+  color: #475569;
+}
+.rv-chat-send {
+  background: none;
+  border: none;
+  color: #6366f1;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+/* ---- Room code badge (bottom center) ---- */
+.rv-code-badge {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.78rem;
+  color: #c4b5fd;
+  letter-spacing: 2px;
+  background: rgba(11, 18, 32, 0.7);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  padding: 6px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.rv-code-badge:hover {
+  background: rgba(139, 92, 246, 0.15);
+}
+
+/* ---- Connecting state ---- */
+.rv-connecting {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #0b1220;
+  color: #94a3b8;
+  font-size: 1.1rem;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+  .rv-sidebar { width: 200px; }
+  .rv-chat {
+    width: calc(100% - 32px);
+    right: 16px;
+    left: 16px;
+  }
+  .rv-game-hud-inner {
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 14px;
+    font-size: 0.8rem;
+  }
+}
